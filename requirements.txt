@@ -1,0 +1,6 @@
+Flask
+Flask-SQLAlchemy
+openai
+anthropic
+google-generativeai
+markdown2

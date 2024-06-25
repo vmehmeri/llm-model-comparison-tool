@@ -1,10 +1,13 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import os
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
 import markdown2
 from flask_sqlalchemy import SQLAlchemy
+import csv
+from io import BytesIO, StringIO
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///votes.db'
@@ -19,6 +22,15 @@ class Votes(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     model = db.Column(db.String(20), nullable=False)
     votes = db.Column(db.Integer, default=0)
+
+class Response(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    prompt = db.Column(db.Text, nullable=False)
+    gpt_response = db.Column(db.Text, nullable=False)
+    claude_response = db.Column(db.Text, nullable=False)
+    gemini_response = db.Column(db.Text, nullable=False)
+    winner = db.Column(db.String(20), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
@@ -47,6 +59,16 @@ def generate():
     claude_response = generate_claude(prompt)
     print("<-- Got response", claude_response)
 
+    # Store the responses in the database
+    new_response = Response(
+        prompt=prompt,
+        gpt_response=gpt4_response,
+        claude_response=claude_response,
+        gemini_response=gemini_response
+    )
+    db.session.add(new_response)
+    db.session.commit()
+
     return jsonify({
         'gpt4': gpt4_response,
         'claude': claude_response,
@@ -59,6 +81,12 @@ def vote():
     vote = Votes.query.filter_by(model=model).first()
     vote.votes += 1
     db.session.commit()
+
+    # Update the winner in the most recent Response
+    latest_response = Response.query.order_by(Response.id.desc()).first()
+    if latest_response:
+        latest_response.winner = model
+        db.session.commit()
     
     votes = {vote.model: vote.votes for vote in Votes.query.all()}
     return jsonify(votes)
@@ -67,12 +95,38 @@ def vote():
 def reset_votes():
     try:
         Votes.query.update({Votes.votes: 0})
+        # Delete all stored responses
+        Response.query.delete()
+
         db.session.commit()
         votes = {vote.model: vote.votes for vote in Votes.query.all()}
         return jsonify(votes)
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/download-results', methods=['GET'])
+def download_results():
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Prompt', 'GPT-4 Response', 'Claude Response', 'Gemini Response', 'Winner', 'Timestamp'])
+    
+    responses = Response.query.all()
+    for response in responses:
+        cw.writerow([response.prompt, response.gpt_response, response.claude_response, 
+                     response.gemini_response, response.winner, response.timestamp])
+    
+    output = si.getvalue().encode('utf-8')
+    si.close()
+
+    buffer = BytesIO()
+    buffer.write(output)
+    buffer.seek(0)
+
+    return send_file(buffer,
+                     mimetype='text/csv',
+                     as_attachment=True,
+                     download_name='ai_responses.csv')
 
 def generate_gpt4(prompt):
     try:

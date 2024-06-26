@@ -1,13 +1,15 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
 import yaml
-from openai import OpenAI
-from anthropic import Anthropic
+from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 import google.generativeai as genai
 from flask_sqlalchemy import SQLAlchemy
 import csv
 from io import BytesIO, StringIO
 from datetime import datetime
+import asyncio
+import aiohttp
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///votes.db'
@@ -18,8 +20,8 @@ with open('config.yaml', 'r') as config_file:
     config = yaml.safe_load(config_file)
 
 # Set up API clients
-openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-anthropic_client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+anthropic_client = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 class Votes(db.Model):
@@ -49,17 +51,9 @@ def index():
     return render_template('index.html', models=config['models'], votes=votes)
 
 @app.route('/generate', methods=['POST'])
-def generate():
+async def generate():
     prompt = request.json['prompt']
-    responses = {}
-
-    for model in config['models']:
-        if model['provider'] == 'openai':
-            responses[model['name']] = generate_openai(prompt, model['api_model'])
-        elif model['provider'] == 'anthropic':
-            responses[model['name']] = generate_anthropic(prompt, model['api_model'])
-        elif model['provider'] == 'google':
-            responses[model['name']] = generate_google(prompt, model['api_model'])
+    responses = await generate_responses(prompt)
 
     # Store the responses in the database
     new_response = Response(prompt=prompt, responses=responses)
@@ -67,6 +61,19 @@ def generate():
     db.session.commit()
 
     return jsonify(responses)
+
+async def generate_responses(prompt):
+    tasks = []
+    for model in config['models']:
+        if model['provider'] == 'openai':
+            tasks.append(generate_openai(prompt, model['api_model']))
+        elif model['provider'] == 'anthropic':
+            tasks.append(generate_anthropic(prompt, model['api_model']))
+        elif model['provider'] == 'google':
+            tasks.append(generate_google(prompt, model['api_model']))
+
+    responses = await asyncio.gather(*tasks)
+    return {model['name']: response for model, response in zip(config['models'], responses)}
 
 @app.route('/vote', methods=['POST'])
 def vote():
@@ -133,9 +140,9 @@ def download_results():
                      as_attachment=True,
                      download_name='ai_responses.csv')
 
-def generate_openai(prompt, model):
+async def generate_openai(prompt, model):
     try:
-        response = openai_client.chat.completions.create(
+        response = await openai_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -147,9 +154,9 @@ def generate_openai(prompt, model):
         return "Failed to generate response."
 
 
-def generate_anthropic(prompt, model):
+async def generate_anthropic(prompt, model):
     try:
-        message = anthropic_client.messages.create(
+        message = await anthropic_client.messages.create(
             model=model,
             messages=[
                 {
@@ -172,7 +179,12 @@ def generate_anthropic(prompt, model):
         print(claude_excp)
         return "Failed to generate response"
 
-def generate_google(prompt, model):
+async def generate_google(prompt, model):
+    # Google's API doesn't support async calls directly, so we'll run it in a separate thread
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: generate_google_sync(prompt, model))
+    
+def generate_google_sync(prompt, model):    
     try:
         model = genai.GenerativeModel(model)
         response = model.generate_content(prompt)

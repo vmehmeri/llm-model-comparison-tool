@@ -1,6 +1,8 @@
 Flask
 Flask-SQLAlchemy
+Flask[async]
 openai
 anthropic
 google-generativeai
 markdown2
+aiohttp

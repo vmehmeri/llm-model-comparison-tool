@@ -1,4 +1,4 @@
-# LLM Comparison 
+# LLM Comparison Tool
 
 This application allows users to compare responses from different AI models, vote on the best responses, and download the evaluation results. It currently only supports models from OpenAI, Anthropic, and Google.
 

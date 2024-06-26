@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
+import yaml
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
@@ -11,6 +12,10 @@ from datetime import datetime
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///votes.db'
 db = SQLAlchemy(app)
+
+# Load configuration
+with open('config.yaml', 'r') as config_file:
+    config = yaml.safe_load(config_file)
 
 # Set up API clients
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -25,67 +30,55 @@ class Votes(db.Model):
 class Response(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     prompt = db.Column(db.Text, nullable=False)
-    gpt_response = db.Column(db.Text, nullable=False)
-    claude_response = db.Column(db.Text, nullable=False)
-    gemini_response = db.Column(db.Text, nullable=False)
-    gemini_flash_response = db.Column(db.Text, nullable=False)
-    winner = db.Column(db.String(20), nullable=True)
+    responses = db.Column(db.JSON, nullable=False)
+    winner = db.Column(db.String(50), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
-    for model in ['gpt4', 'claude', 'gemini', 'gemini_flash']:
-        if not Votes.query.filter_by(model=model).first():
-            db.session.add(Votes(model=model))
+    for model in config['models']:
+        vote = Votes.query.filter_by(model=model['name']).first()
+        if vote is None:
+            db.session.add(Votes(model=model['name']))
     db.session.commit()
 
 @app.route('/')
 def index():
     votes = {vote.model: vote.votes for vote in Votes.query.all()}
-    return render_template('index.html', votes=votes)
+    print(f"Initial votes: {votes}")  # Debug print
+    return render_template('index.html', models=config['models'], votes=votes)
 
 @app.route('/generate', methods=['POST'])
 def generate():
     prompt = request.json['prompt']
+    responses = {}
 
-    # Generate responses from all three models
-    print("--> Prompting GPT4o")
-    gpt4_response = generate_gpt4(prompt)
-    print("<-- Got response", gpt4_response)
-    print("Prompting Gemini")
-    gemini_response = generate_gemini(prompt)
-    print("<-- Got response", gemini_response)
-    print("--> Prompting Claude")
-    claude_response = generate_claude(prompt)
-    print("<-- Got response", claude_response)
-    print("Prompting Gemini")
-    gemini_flash_response = generate_gemini_flash(prompt)
-    print("<-- Got response", gemini_flash_response)
+    for model in config['models']:
+        if model['provider'] == 'openai':
+            responses[model['name']] = generate_openai(prompt, model['api_model'])
+        elif model['provider'] == 'anthropic':
+            responses[model['name']] = generate_anthropic(prompt, model['api_model'])
+        elif model['provider'] == 'google':
+            responses[model['name']] = generate_google(prompt, model['api_model'])
 
     # Store the responses in the database
-    new_response = Response(
-        prompt=prompt,
-        gpt_response=gpt4_response,
-        claude_response=claude_response,
-        gemini_response=gemini_response,
-        gemini_flash_response=gemini_flash_response
-        
-    )
+    new_response = Response(prompt=prompt, responses=responses)
     db.session.add(new_response)
     db.session.commit()
 
-    return jsonify({
-        'gpt4': gpt4_response,
-        'claude': claude_response,
-        'gemini': gemini_response,
-        'gemini_flash': gemini_flash_response
-    })
+    return jsonify(responses)
 
 @app.route('/vote', methods=['POST'])
 def vote():
     model = request.json['model']
     vote = Votes.query.filter_by(model=model).first()
-    vote.votes += 1
+    
+    if vote is None:
+        vote = Votes(model=model, votes=1)
+        db.session.add(vote)
+    else:
+        vote.votes += 1
+    
     db.session.commit()
 
     # Update the winner in the most recent Response
@@ -94,16 +87,16 @@ def vote():
         latest_response.winner = model
         db.session.commit()
     
-    votes = {vote.model: vote.votes for vote in Votes.query.all()}
+    # Fetch all votes and return as a dictionary
+    all_votes = Votes.query.all()
+    votes = {vote.model: vote.votes for vote in all_votes}
     return jsonify(votes)
 
 @app.route('/reset-votes', methods=['POST'])
 def reset_votes():
     try:
         Votes.query.update({Votes.votes: 0})
-        # Delete all stored responses
         Response.query.delete()
-
         db.session.commit()
         votes = {vote.model: vote.votes for vote in Votes.query.all()}
         return jsonify(votes)
@@ -115,12 +108,18 @@ def reset_votes():
 def download_results():
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(['Prompt', 'GPT-4 Response', 'Claude Response', 'Gemini Pro Response', 'Gemini Flash Response', 'Winner', 'Timestamp'])
+    
+    header = ['Prompt', 'Winner', 'Timestamp']
+    for model in config['models']:
+        header.append(f"{model['display_name']} Response")
+    cw.writerow(header)
     
     responses = Response.query.all()
     for response in responses:
-        cw.writerow([response.prompt, response.gpt_response, response.claude_response, 
-                     response.gemini_response, response.gemini_flash_response, response.winner, response.timestamp])
+        row = [response.prompt, response.winner, response.timestamp]
+        for model in config['models']:
+            row.append(response.responses.get(model['name'], ''))
+        cw.writerow(row)
     
     output = si.getvalue().encode('utf-8')
     si.close()
@@ -134,10 +133,10 @@ def download_results():
                      as_attachment=True,
                      download_name='ai_responses.csv')
 
-def generate_gpt4(prompt):
+def generate_openai(prompt, model):
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-2024-05-13",
+            model=model,
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -148,10 +147,10 @@ def generate_gpt4(prompt):
         return "Failed to generate response."
 
 
-def generate_claude(prompt):
+def generate_anthropic(prompt, model):
     try:
         message = anthropic_client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -173,9 +172,9 @@ def generate_claude(prompt):
         print(claude_excp)
         return "Failed to generate response"
 
-def generate_gemini(prompt):
+def generate_google(prompt, model):
     try:
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        model = genai.GenerativeModel(model)
         response = model.generate_content(prompt)
         html_content =  f"<md-block>{response.text}</md-block>"  
         return html_content
@@ -183,11 +182,6 @@ def generate_gemini(prompt):
         print(gemini_excp)
         return "Failed to generate response."
 
-def generate_gemini_flash(prompt):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content(prompt)
-    html_content =  f"<md-block>{response.text}</md-block>"  
-    return html_content
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,0 +1,20 @@
+models:
+  - name: GPT-4o
+    provider: openai
+    api_model: gpt-4o-2024-05-13
+    display_name: GPT-4o
+
+  - name: Claude
+    provider: anthropic
+    api_model: claude-3-5-sonnet-20240620
+    display_name: Claude 3.5 Sonnet
+
+  - name: Gemini Pro
+    provider: google
+    api_model: gemini-1.5-pro
+    display_name: Gemini 1.5 Pro
+
+  - name: Gemini Flash
+    provider: google
+    api_model: gemini-1.5-flash
+    display_name: Gemini 1.5 Flash

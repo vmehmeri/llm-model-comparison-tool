@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LLM Evaluator</title>
+    <title>LLM Comparison Tool</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
@@ -75,7 +75,7 @@
 </head>
 <body>
     <div class="container mt-5">
-        <h1 class="text-center mb-4">LLM Evaluator</h1>
+        <h1 class="text-center mb-4">LLM Comparison Tool</h1>
         <div class="mb-3">
             <label for="prompt" class="form-label">Enter your prompt:</label>
             <textarea class="form-control" id="prompt" rows="3"></textarea>
@@ -87,58 +87,22 @@
             </div>
         </div>
         <div id="results">
+            {% for model in models %}
             <div class="card">
                 <div class="card-header">
-                    <span class="model-name">GPT-4o</span>
+                    <span class="model-name">{{ model.display_name }}</span>
                     <div class="vote-button-container">
-                        <button class="btn btn-light btn-sm vote-button" data-model="gpt4">
+                        <button class="btn btn-light btn-sm vote-button" data-model="{{ model.name }}">
                             <i class="fas fa-thumbs-up"></i> Vote
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
-                    <p id="gpt4-response"></p>
+                    <div id="{{ model.name|lower|replace(' ', '-') }}-response"></div>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="model-name">Claude 3.5 Sonnet</span>
-                    <div class="vote-button-container">
-                        <button class="btn btn-light btn-sm vote-button" data-model="claude">
-                            <i class="fas fa-thumbs-up"></i> Vote
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p id="claude-response"></p>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="model-name">Gemini 1.5 Pro</span>
-                    <div class="vote-button-container">
-                        <button class="btn btn-light btn-sm vote-button" data-model="gemini">
-                            <i class="fas fa-thumbs-up"></i> Vote
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="gemini-response"></div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="model-name">Gemini 1.5 Flash</span>
-                    <div class="vote-button-container">
-                        <button class="btn btn-light btn-sm vote-button" data-model="gemini_flash">
-                            <i class="fas fa-thumbs-up"></i> Vote
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="gemini-flash-response"></div>
-                </div>
-            </div>
+            {% endfor %}
+            
             
         </div>
         <div class="text-end mb-3">
@@ -151,48 +115,26 @@
         </div>
         <div id="vote-results" class="mt-4">
             <h4 class="mb-3">Vote Results</h4>
+            {% for model in models %}
             <div class="mb-3">
                 <div class="d-flex justify-content-between">
-                    <span class="model-name">GPT-4o</span>
-                    <span class="vote-count" id="gpt4-votes">{{ votes.gpt4 }}</span>
+                    <span class="model-name">{{ model.display_name }}</span>
+                    <span class="vote-count" id="{{ model.name|lower|replace(' ', '-') }}-votes">{{ votes[model.name] }}</span>
                 </div>
                 <div class="progress">
-                    <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="gpt4-progress"></div>
+                    <div class="progress-bar" role="progressbar" style="width: 0%" id="{{ model.name|lower|replace(' ', '-') }}-progress"></div>
                 </div>
             </div>
-            <div class="mb-3">
-                <div class="d-flex justify-content-between">
-                    <span class="model-name">Claude 3.5 Sonnet</span>
-                    <span class="vote-count" id="claude-votes">{{ votes.claude }}</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="claude-progress"></div>
-                </div>
-            </div>
-            <div class="mb-3">
-                <div class="d-flex justify-content-between">
-                    <span class="model-name">Gemini 1.5 Pro</span>
-                    <span class="vote-count" id="gemini-votes">{{ votes.gemini }}</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="gemini-progress"></div>
-                </div>
-            </div>
-            <div class="mb-3">
-                <div class="d-flex justify-content-between">
-                    <span class="model-name">Gemini 1.5 Flash</span>
-                    <span class="vote-count" id="gemini-flash-votes">{{ votes.gemini_flash }}</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar bg-warning" role="progressbar" style="width: 0%" id="gemini-flash-progress"></div>
-                </div>
-            </div>
+            {% endfor %}
+            
         </div>
     </div>
 
     <script type="module" src="https://md-block.verou.me/md-block.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const models = {{ models|tojson }};
+
         document.getElementById('submit').addEventListener('click', async () => {
         const prompt = document.getElementById('prompt').value;
         const loading = document.getElementById('loading');
@@ -212,10 +154,16 @@
 
             const data = await response.json();
 
-            document.getElementById('gpt4-response').innerHTML = data.gpt4;
-            document.getElementById('claude-response').innerHTML = data.claude;
-            document.getElementById('gemini-response').innerHTML = data.gemini;
-            document.getElementById('gemini-flash-response').innerHTML = data.gemini_flash;
+            models.forEach(model => {
+                const elementId = `${model.name.toLowerCase().replace(' ', '-')}-response`;
+                if (model.provider === 'google') {
+                    document.getElementById(elementId).innerHTML = data[model.name];
+                } else {
+                    document.getElementById(elementId).textContent = data[model.name];
+                }
+            });
+
+            //showVoteButtons();
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -223,6 +171,7 @@
             submitButton.disabled = false;
         }
     });
+
 
     function hideVoteButtons() {
         document.querySelectorAll('.vote-button-container').forEach(container => {
@@ -236,44 +185,12 @@
         });
     }
 
-    document.getElementById('submit').addEventListener('click', async () => {
-        const prompt = document.getElementById('prompt').value;
-        const loading = document.getElementById('loading');
-        const submitButton = document.getElementById('submit');
-
-        loading.style.display = 'block';
-        submitButton.disabled = true;
-
-        try {
-            const response = await fetch('/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ prompt })
-            });
-
-            const data = await response.json();
-
-            document.getElementById('gpt4-response').innerHTML = data.gpt4;
-            document.getElementById('claude-response').innerHTML = data.claude;
-            document.getElementById('gemini-response').innerHTML = data.gemini;
-            document.getElementById('gemini-flash-response').innerHTML = data.gemini_flash;
-            
-
-            // Show vote buttons after generating new responses
-            //showVoteButtons();
-        } catch (error) {
-            console.error('Error:', error);
-        } finally {
-            loading.style.display = 'none';
-            submitButton.disabled = false;
-        }
-    });
+    
 
     document.querySelectorAll('.vote-button').forEach(button => {
         button.addEventListener('click', async () => {
             const model = button.dataset.model;
+            console.log(`Voting for model: ${model}`);  // Debug log
             try {
                 const response = await fetch('/vote', {
                     method: 'POST',
@@ -284,9 +201,9 @@
                 });
 
                 const votes = await response.json();
+                console.log('Received votes:', votes);  // Debug log
                 updateVoteResults(votes);
 
-                // Hide vote buttons after voting
                 //hideVoteButtons();
             } catch (error) {
                 console.error('Error:', error);
@@ -294,32 +211,23 @@
         });
     });
 
-  
-
     function updateVoteResults(votes) {
-        const totalVotes = votes.gpt4 + votes.claude + votes.gemini;
+        console.log('Updating vote results with:', votes);  // Debug log
+        const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
+        console.log('Total votes:', totalVotes);  // Debug log
         
-        document.getElementById('gpt4-votes').textContent = votes.gpt4;
-        document.getElementById('claude-votes').textContent = votes.claude;
-        document.getElementById('gemini-votes').textContent = votes.gemini;
-        document.getElementById('gemini-flash-votes').textContent = votes.gemini_flash;
-
-        if (totalVotes === 0) {
-            // If all votes are zero, set all progress bars to 0%
-            document.getElementById('gpt4-progress').style.width = '0%';
-            document.getElementById('claude-progress').style.width = '0%';
-            document.getElementById('gemini-progress').style.width = '0%';
-            document.getElementById('gemini-flash-progress').style.width = '0%';
-        } else {
-            document.getElementById('gpt4-progress').style.width = `${(votes.gpt4 / totalVotes) * 100}%`;
-            document.getElementById('claude-progress').style.width = `${(votes.claude / totalVotes) * 100}%`;
-            document.getElementById('gemini-progress').style.width = `${(votes.gemini / totalVotes) * 100}%`;
-            document.getElementById('gemini-flash-progress').style.width = `${(votes.gemini_flash / totalVotes) * 100}%`;
-        }
+        models.forEach(model => {
+            const modelName = model.name.toLowerCase().replace(' ', '-');
+            const voteCount = votes[model.name] || 0;
+            console.log(`Updating ${model.name}: ${voteCount} votes`);  // Debug log
+            document.getElementById(`${modelName}-votes`).textContent = voteCount;
+            const percentage = totalVotes === 0 ? 0 : (voteCount / totalVotes) * 100;
+            document.getElementById(`${modelName}-progress`).style.width = `${percentage}%`;
+        });
     }
 
     document.getElementById('reset-votes').addEventListener('click', async () => {
-        if (confirm('Are you sure you want to reset all votes?')) {
+        if (confirm('Are you sure you want to reset all votes and clear all stored results?')) {
             try {
                 const response = await fetch('/reset-votes', {
                     method: 'POST'
@@ -327,6 +235,15 @@
 
                 const votes = await response.json();
                 updateVoteResults(votes);
+
+                models.forEach(model => {
+                    const elementId = `${model.name.toLowerCase().replace(' ', '-')}-response`;
+                    document.getElementById(elementId).textContent = '';
+                });
+
+                //hideVoteButtons();
+
+                
             } catch (error) {
                 console.error('Error:', error);
             }

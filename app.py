@@ -3,7 +3,6 @@ import os
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
-import markdown2
 from flask_sqlalchemy import SQLAlchemy
 import csv
 from io import BytesIO, StringIO
@@ -29,12 +28,13 @@ class Response(db.Model):
     gpt_response = db.Column(db.Text, nullable=False)
     claude_response = db.Column(db.Text, nullable=False)
     gemini_response = db.Column(db.Text, nullable=False)
+    gemini_flash_response = db.Column(db.Text, nullable=False)
     winner = db.Column(db.String(20), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
-    for model in ['gpt4', 'claude', 'gemini']:
+    for model in ['gpt4', 'claude', 'gemini', 'gemini_flash']:
         if not Votes.query.filter_by(model=model).first():
             db.session.add(Votes(model=model))
     db.session.commit()
@@ -58,13 +58,18 @@ def generate():
     print("--> Prompting Claude")
     claude_response = generate_claude(prompt)
     print("<-- Got response", claude_response)
+    print("Prompting Gemini")
+    gemini_flash_response = generate_gemini_flash(prompt)
+    print("<-- Got response", gemini_flash_response)
 
     # Store the responses in the database
     new_response = Response(
         prompt=prompt,
         gpt_response=gpt4_response,
         claude_response=claude_response,
-        gemini_response=gemini_response
+        gemini_response=gemini_response,
+        gemini_flash_response=gemini_flash_response
+        
     )
     db.session.add(new_response)
     db.session.commit()
@@ -72,7 +77,8 @@ def generate():
     return jsonify({
         'gpt4': gpt4_response,
         'claude': claude_response,
-        'gemini': gemini_response
+        'gemini': gemini_response,
+        'gemini_flash': gemini_flash_response
     })
 
 @app.route('/vote', methods=['POST'])
@@ -109,12 +115,12 @@ def reset_votes():
 def download_results():
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(['Prompt', 'GPT-4 Response', 'Claude Response', 'Gemini Response', 'Winner', 'Timestamp'])
+    cw.writerow(['Prompt', 'GPT-4 Response', 'Claude Response', 'Gemini Pro Response', 'Gemini Flash Response', 'Winner', 'Timestamp'])
     
     responses = Response.query.all()
     for response in responses:
         cw.writerow([response.prompt, response.gpt_response, response.claude_response, 
-                     response.gemini_response, response.winner, response.timestamp])
+                     response.gemini_response, response.gemini_flash_response, response.winner, response.timestamp])
     
     output = si.getvalue().encode('utf-8')
     si.close()
@@ -134,7 +140,9 @@ def generate_gpt4(prompt):
             model="gpt-4o-2024-05-13",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content
+
+        html_content = f"<md-block>{response.choices[0].message.content}</md-block>"   
+        return html_content
     except Exception as gpt_excp:
         print(gpt_excp)
         return "Failed to generate response."
@@ -157,7 +165,10 @@ def generate_claude(prompt):
             ],
             max_tokens=1024
         )
-        return message.content[0].text
+        html_content = f"<md-block>{message.content[0].text}</md-block>"  
+        
+        return html_content
+   
     except Exception as claude_excp:
         print(claude_excp)
         return "Failed to generate response"
@@ -166,13 +177,17 @@ def generate_gemini(prompt):
     try:
         model = genai.GenerativeModel('gemini-1.5-pro')
         response = model.generate_content(prompt)
-        markdown_text = response.text
-        html_content = markdown2.markdown(markdown_text)  # Convert Markdown to HTML
+        html_content =  f"<md-block>{response.text}</md-block>"  
         return html_content
     except Exception as gemini_excp:
         print(gemini_excp)
         return "Failed to generate response."
 
+def generate_gemini_flash(prompt):
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content(prompt)
+    html_content =  f"<md-block>{response.text}</md-block>"  
+    return html_content
 
 if __name__ == '__main__':
     app.run(debug=True)

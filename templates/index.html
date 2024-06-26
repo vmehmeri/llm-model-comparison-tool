@@ -89,7 +89,7 @@
         <div id="results">
             <div class="card">
                 <div class="card-header">
-                    <span class="model-name">GPT-4</span>
+                    <span class="model-name">GPT-4o</span>
                     <div class="vote-button-container">
                         <button class="btn btn-light btn-sm vote-button" data-model="gpt4">
                             <i class="fas fa-thumbs-up"></i> Vote
@@ -126,6 +126,20 @@
                     <div id="gemini-response"></div>
                 </div>
             </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="model-name">Gemini 1.5 Flash</span>
+                    <div class="vote-button-container">
+                        <button class="btn btn-light btn-sm vote-button" data-model="gemini_flash">
+                            <i class="fas fa-thumbs-up"></i> Vote
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="gemini-flash-response"></div>
+                </div>
+            </div>
+            
         </div>
         <div class="text-end mb-3">
             <button id="reset-votes" class="btn btn-outline-danger me-2">
@@ -155,7 +169,7 @@
                     <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="claude-progress"></div>
                 </div>
             </div>
-            <div>
+            <div class="mb-3">
                 <div class="d-flex justify-content-between">
                     <span class="model-name">Gemini 1.5 Pro</span>
                     <span class="vote-count" id="gemini-votes">{{ votes.gemini }}</span>
@@ -164,9 +178,19 @@
                     <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="gemini-progress"></div>
                 </div>
             </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="model-name">Gemini 1.5 Flash</span>
+                    <span class="vote-count" id="gemini-flash-votes">{{ votes.gemini_flash }}</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar bg-warning" role="progressbar" style="width: 0%" id="gemini-flash-progress"></div>
+                </div>
+            </div>
         </div>
     </div>
 
+    <script type="module" src="https://md-block.verou.me/md-block.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('submit').addEventListener('click', async () => {
@@ -188,9 +212,10 @@
 
             const data = await response.json();
 
-            document.getElementById('gpt4-response').textContent = data.gpt4;
-            document.getElementById('claude-response').textContent = data.claude;
+            document.getElementById('gpt4-response').innerHTML = data.gpt4;
+            document.getElementById('claude-response').innerHTML = data.claude;
             document.getElementById('gemini-response').innerHTML = data.gemini;
+            document.getElementById('gemini-flash-response').innerHTML = data.gemini_flash;
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -230,12 +255,14 @@
 
             const data = await response.json();
 
-            document.getElementById('gpt4-response').textContent = data.gpt4;
-            document.getElementById('claude-response').textContent = data.claude;
+            document.getElementById('gpt4-response').innerHTML = data.gpt4;
+            document.getElementById('claude-response').innerHTML = data.claude;
             document.getElementById('gemini-response').innerHTML = data.gemini;
+            document.getElementById('gemini-flash-response').innerHTML = data.gemini_flash;
+            
 
             // Show vote buttons after generating new responses
-            showVoteButtons();
+            //showVoteButtons();
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -260,7 +287,7 @@
                 updateVoteResults(votes);
 
                 // Hide vote buttons after voting
-                hideVoteButtons();
+                //hideVoteButtons();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -275,16 +302,19 @@
         document.getElementById('gpt4-votes').textContent = votes.gpt4;
         document.getElementById('claude-votes').textContent = votes.claude;
         document.getElementById('gemini-votes').textContent = votes.gemini;
+        document.getElementById('gemini-flash-votes').textContent = votes.gemini_flash;
 
         if (totalVotes === 0) {
             // If all votes are zero, set all progress bars to 0%
             document.getElementById('gpt4-progress').style.width = '0%';
             document.getElementById('claude-progress').style.width = '0%';
             document.getElementById('gemini-progress').style.width = '0%';
+            document.getElementById('gemini-flash-progress').style.width = '0%';
         } else {
             document.getElementById('gpt4-progress').style.width = `${(votes.gpt4 / totalVotes) * 100}%`;
             document.getElementById('claude-progress').style.width = `${(votes.claude / totalVotes) * 100}%`;
             document.getElementById('gemini-progress').style.width = `${(votes.gemini / totalVotes) * 100}%`;
+            document.getElementById('gemini-flash-progress').style.width = `${(votes.gemini_flash / totalVotes) * 100}%`;
         }
     }
 
@@ -306,7 +336,7 @@
     // Initial update of vote results
     updateVoteResults({{ votes|tojson }});
     // Initially hide vote buttons
-    hideVoteButtons();
+    //hideVoteButtons();
     </script>
 </body>
 </html>

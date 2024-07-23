@@ -21,8 +21,8 @@ This application allows users to compare responses from different AI models, vot
 
 1. Clone this repository:
 ```
-git clone git@gitlab.com:google-cloud-ce/communities/NATT-AIML/genai-fsa/emea/experimental/users/vdantas/llm-comparison-tool.git
-cd ai-model-comparison-app
+git clone https://github.com/vmehmeri/llm-model-comparison-tool.git
+cd llm-model-comparison-tool
 ```
 2. Create a virtual environment:
 ```
